@@ -1,0 +1,128 @@
+---
+title: "Data Exploration"
+author: "Spiro Stilianoudakis"
+date: "July 18, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Libraries
+
+```{r}
+library(affy)
+library(dplyr)
+library(pander)
+library(limma)
+library(genefilter)
+library(hgu133a2.db)
+library(xlsx)
+library(MDmisc)
+# library(arrayQualityMetrics)
+library(enrichR)
+```
+
+
+# Loading Workspace
+
+```{r}
+#setting directory
+
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/data")
+
+load("preprocessed_CEL.Rdata")
+load("preprocessed_data.Rdata")
+
+```
+
+# Expression Matrix
+
+```{r}
+
+rnadat <- exprs(eset)
+
+dim(rnadat)
+#22277    76
+
+```
+
+# PhenoData
+
+```{r}
+
+phenodat <- eset@phenoData@data
+
+dim(phenodat)
+#76 15
+
+```
+
+# Methylation Data
+
+```{r}
+methyldat <- combat_edata
+
+dim(methyldat)
+#386805     76
+
+```
+
+# Data Exploration
+
+```{r}
+
+#determing number of groups
+
+table(phenodat$Donor)
+#DCD DDLT LDLT 
+#  2   58   16
+
+#classifying the 2 DCD samples as DDLT
+phenodat$Donor[which(phenodat$Donor=="DCD")] <- "DDLT"
+#sanity check
+table(phenodat$Donor)
+#DDLT LDLT 
+#  60   16 
+
+#Checking to see that the columns of the microarray/methylation match up with the pheno data
+all.equal(colnames(rnadat),colnames(methyldat))
+# "76 string mismatches"
+#the samples between microarray and methylation data do not match up
+
+all.equal(colnames(rnadat),rownames(phenodat))
+#TRUE
+# the samples between the microarray and pheno data match up
+
+#the data is paired (two samples per patient)
+#Pre-Implantation biopsy (L1) vs Post-reperfusion biopsy (L2)
+
+#renaming the columns of microarray and pheno data to match methylation data (using L1/L2 instead of pre/90)
+colnames(rnadat)[grep("90.CEL", colnames(rnadat))] <- gsub("90.CEL", "L2", colnames(rnadat)[grep("90.CEL", colnames(rnadat))])
+colnames(rnadat)[grep("pre.CEL", colnames(rnadat))] <- gsub("pre.CEL", "L1", colnames(rnadat)[grep("pre.CEL", colnames(rnadat))])
+rownames(phenodat)[grep("90.CEL", rownames(phenodat))] <- gsub("90.CEL", "L2", rownames(phenodat)[grep("90.CEL", rownames(phenodat))])
+rownames(phenodat)[grep("pre.CEL", rownames(phenodat))] <- gsub("pre.CEL", "L1", rownames(phenodat)[grep("pre.CEL", rownames(phenodat))])
+
+
+#the columns of the methylation (samples) are out of order with respect to microarray/pheno data
+#they are L1, L2 instead of L2,L1
+#fixing them here
+methyldat <- methyldat[,match(colnames(rnadat), colnames(methyldat))]
+
+#sanity check
+all.equal(colnames(rnadat),colnames(methyldat))
+#TRUE
+
+```
+
+# Saving the data
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/spiro_data")
+
+saveRDS(rnadat, "rnadat.rds")
+saveRDS(methyldat, "methyldat.rds")
+saveRDS(phenodat, "phenodat.rds")
+
+```
