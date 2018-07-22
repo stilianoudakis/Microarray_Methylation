@@ -1,0 +1,189 @@
+---
+title: "Differential Gene Expression"
+subtitle: "Analysis 1A: L1 vs L2 in DDLT"
+author: "Spiro Stilianoudakis"
+date: "July 18, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Libraries
+
+```{r}
+#base R packages
+library(data.table)
+library(dplyr)
+library(geneplotter)
+library(ggplot2)
+library(gplots)
+library(RColorBrewer)
+library(pheatmap)
+library(ggbeeswarm)
+
+#bioconductor packages
+library(MultiAssayExperiment)
+library(GenomicRanges)
+library(IRanges)
+library(RaggedExperiment)
+library(SummarizedExperiment)
+
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("edgeR")
+library(samr)
+library(edgeR)
+library(limma)
+library(DESeq2)
+library(EDASeq)
+library(hgu95av2.db)
+library(apeglm)
+library(genefilter)
+library(affy)
+```
+
+# Setting directory
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/spiro_data")
+
+#importing data
+
+rnadat <- readRDS("rnadat.rds")
+phenodat <- readRDS("phenodat.rds")
+
+```
+
+# Subsetting Data
+
+```{r}
+
+phenodat1A <- phenodat[which(phenodat$Donor=="DDLT"),]
+rnadat1A <- rnadat[,match(rownames(phenodat1A), colnames(rnadat))]
+all.equal(rownames(phenodat1A), colnames(rnadat1A))
+#TRUE
+
+#rearranging so that all L1 are before L2
+phenodat1A <- phenodat1A[order(phenodat1A$Type),]
+rnadat1A <- rnadat1A[,match(rownames(phenodat1A), colnames(rnadat1A))]
+
+
+```
+
+# Differential Gene Expression
+
+```{r}
+f1 <- pOverA(1/3, log2(100))
+f2 <- function(x) (diff(range(x, na.rm=T))>log2(1.5))
+ff <- filterfun(f1,f2)
+index <- genefilter(rnadat1A, ff)
+sum(index)
+edata <- rnadat1A[index,]
+dim(edata)
+#11343    60
+
+#SAM
+
+data <- list(x = edata, y=c(rep(1,30),rep(2,30)), genenames=rownames(rnadat1A), logged2=T)
+samr.obj <- samr(data, resp.type = "Two class unpaired", nperms = 10, random.seed = 123)
+
+delta.table <- samr.compute.delta.table(samr.obj, min.foldchange = 1.5)
+delta.table
+
+tmp <- samr.compute.delta.table(samr.obj, min.foldchange = 1.5, dels=3.0)
+
+samr.plot(samr.obj, del=3.0, min.foldchange = 1.5)
+
+siggenes.table <- samr.compute.siggenes.table(samr.obj, del=3.0, data=data, delta.table = delta.table, min.foldchange = 1.5)
+
+dim(siggenes.table$genes.up)
+#303   8
+dim(siggenes.table$genes.lo)
+#54  8
+
+SAMupGene <- siggenes.table$genes.up[, "Gene ID"]
+SAMdownGene <- siggenes.table$genes.lo[, "Gene ID"]
+SAMdeg <- c(SAMupGene,SAMdownGene)
+
+# LIMMA
+comparison <- factor(phenodat1A$Type, levels = c("L1","L2"))
+batch_date <- factor(phenodat1A$ScanDate)
+design <- model.matrix(~comparison + batch_date)
+fit <- lmFit(edata, design)
+fit2 <- eBayes(fit)
+LIMMAdeg <- topTable(fit2, coef = "comparisonL2", number = Inf, adjust.method = "BH", p.value = 1)
+LIMMAdeg <- LIMMAdeg[1:500,]
+
+LIMMAdeg <- topTable(fit2, coef = "comparisonL2", number = Inf, adjust.method = "BH", p.value = 0.05, lfc = log2(2))
+head(LIMMAdeg)
+dim(LIMMAdeg)
+#234   6
+
+
+# Fold change
+
+edataexp <- 2^edata
+FCM <- as.vector(log2(rowMeans(edataexp[,1:30])/rowMeans(edataexp[,31:60])))
+FCA <- as.vector(log2(rowMeans(edataexp)))
+mycol <- rep("black", length(FCM))
+
+#use threshold of +-`1 to correspond to fold change of 2
+#+1 up regulated; -1 down regulated
+mycol[which(FCM > 1)] <- "red"
+mycol[which(FCM < -1)] <- "blue"
+sum(FCM > 1); sum(FCM < -1)
+#9; 230
+
+plot(FCA, FCM, xlab = "Log(Mean Intensity)", ylab = "Log(Fold Change)", col = mycol)
+abline(h=c(1,-1), col="purple", lty="dashed")
+
+meanX <- log2(rowMeans(edataexp[,1:30]))
+meanY <- log2(rowMeans(edataexp[,31:60]))
+plot(meanX,meanY, xlab="Log Mean Intensity:Normal",ylab="Log Mean Intensity:Tumor", col=mycol)
+abline(-1,1,col="purple", lty="dashed")
+abline(1,1,col="purple", lty="dashed")
+
+#which genes were diff expr according to fold change
+edata$FCM <- FCM
+edata$FCA <- FCA
+fcdeg <- rownames(edata)[which(FCM < -1 | FCM > 1)]
+length(fcdeg)
+
+p <- numeric()
+fold.change <- numeric()
+for(i in 1:dim(edata)[1]){
+  p[i] <- t.test(edata[i,grep("L1",colnames(edata))],edata[i,grep("L2",colnames(edata))])$p.value
+  fold.change[i] <- log2(mean(as.numeric(edata[i,grep("L1",colnames(edata))]))/mean(as.numeric(edata[i,grep("L2",colnames(edata))])))
+  
+  #log2(rowMeans(batch_exp[,1:20])/rowMeans(batch_exp[,21:40]))
+}
+results <- cbind.data.frame(P.value = p, LogFC = fold.change)
+rownames(results) <- rownames(edata)
+results <- results[order(results$P.value),]
+adjustedp <- p.adjust(results$P.value, method = "fdr")
+results$AdjustedPValue <- adjustedp
+head(results)
+length(which(results$AdjustedPValue<.05))
+
+```
+
+# Comparing DEGs
+
+```{r}
+length(intersect(SAMdeg, rownames(LIMMAdeg)))
+length(intersect(fcdeg, rownames(LIMMAdeg)))
+length(intersect(fcdeg, SAMdeg))
+
+alldegs <- union(fcdeg, union(SAMdeg, rownames(LIMMAdeg)))
+
+tmp1 <- alldegs %in% fcdeg
+tmp2 <- alldegs %in% SAMdeg
+tmp3 <- alldegs %in% rownames(LIMMAdeg)
+venndat <- cbind(tmp1,tmp2,tmp3)
+vennct <- vennCounts(venndat)
+vennDiagram(vennct, names = c("Fold Change", "SAM", "LIMMA"), cex = 1, counts.col = "red")
+
+
+```
+

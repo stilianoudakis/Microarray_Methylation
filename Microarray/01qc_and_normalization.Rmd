@@ -1,0 +1,81 @@
+---
+title: "Quality Control & Normalization"
+author: "Spiro Stilianoudakis"
+date: "July 18, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Libraries
+
+```{r}
+#base R packages
+library(data.table)
+library(dplyr)
+library(geneplotter)
+library(ggplot2)
+library(gplots)
+library(RColorBrewer)
+library(pheatmap)
+library(ggbeeswarm)
+
+#bioconductor packages
+library(MultiAssayExperiment)
+library(GenomicRanges)
+library(IRanges)
+library(RaggedExperiment)
+library(SummarizedExperiment)
+
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("edgeR")
+library(edgeR)
+library(limma)
+library(DESeq2)
+library(EDASeq)
+library(hgu95av2.db)
+library(apeglm)
+library(genefilter)
+library(affy)
+```
+
+# Setting directory
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/spiro_data")
+
+#importing data
+
+rnadat <- readRDS("rnadat.rds")
+phenodat <- readRDS("phenodat.rds")
+
+```
+
+# Quality Control & Normalization
+
+```{r}
+#how many genes have nonzero counts across all samples
+idx.nz <- apply(rnadat, 1, function(x) { all(x > 0)})
+sum(idx.nz)
+#22277
+#all genes have nonzero counts
+
+#plotting intensity distributions
+uniq.samps <- length(unique(substr(rownames(phenodat),1,4)))
+usr.col <- brewer.pal(uniq.samps)
+mycols <- rep(1:uniq.samps, each=2)
+multidensity( rnadat,col=mycols,
+              xlab="Counts", 
+              legend=list("topright", 
+                          legend=rownames(phenodat),
+                          fill=mycols, 
+                          cex=.6,
+                          ncol=4))
+boxplot(rnadat, col=mycols, las=3, cex.axis=0.5, names=substr(rownames(phenodat),1,4))
+
+
+```
+
+
