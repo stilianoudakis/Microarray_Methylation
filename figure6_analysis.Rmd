@@ -145,6 +145,7 @@ ggplot(M2A, aes(x=Expression, y=Methylation)) +#, color=Group)) +
 
 ## DDLT & Injury=High
 ##(pre vs post)
+##(steps the same as for first part)
 
 ```{r}
 setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
@@ -211,6 +212,7 @@ ggplot(M2B, aes(x=Expression, y=Methylation)) + geom_point()
 
 ## DDLT & Pre
 ##(low vs high)
+##(steps the same as for first part)
 
 ```{r}
 setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
@@ -286,6 +288,7 @@ ggplot(M3A, aes(x=Expression, y=Methylation)) + geom_point()
 
 ## DDLT & Post
 ##(low vs high)
+##(steps the same as for first part)
 
 ```{r}
 setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
