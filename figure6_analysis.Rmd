@@ -1,0 +1,356 @@
+---
+title: 'Figure 6: Methylation vs Expression'
+author: "Spiro Stilianoudakis"
+date: "July 25, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Libraries
+
+```{r include=FALSE}
+#base R packages
+library(data.table)
+library(dplyr)
+library(geneplotter)
+library(ggplot2)
+#library(gplots)
+library(RColorBrewer)
+library(pheatmap)
+library(ggbeeswarm)
+library(rcompanion)
+library(stringr)
+library(openxlsx)
+
+#bioconductor packages
+#library(MultiAssayExperiment)
+#library(GenomicRanges)
+#library(IRanges)
+#library(RaggedExperiment)
+#library(SummarizedExperiment)
+
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("edgeR")
+#library(samr)
+#library(edgeR)
+#library(limma)
+#library(DESeq2)
+#library(EDASeq)
+#library(hgu95av2.db)
+#library(apeglm)
+#library(genefilter)
+#library(affy)
+```
+
+# Setting directory & importing workspace data
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/data")
+
+load("preprocessed_CEL.Rdata")
+load("preprocessed_data.Rdata")
+```
+
+## DDLT & Injury=Low
+##(pre vs post)
+
+```{r}
+
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
+
+#set the index for subsetting the data according to the analysis of choice
+ind <- (sample_annotation$Donor == "DDLT" & sample_annotation$Injury == "low")
+
+#import gene expression data
+degs <- read.xlsx("DEGs_Analysis.xlsx",
+                    sheet = "2A",
+                    startRow = 1,
+                    colNames = TRUE)
+
+#import methylation data
+dems <- read.xlsx("2A.xlsx",
+                  sheet = "DEGs",
+                  startRow = 1,
+                  colNames = TRUE)
+
+#set cutoff to extract differentially methylated cpgs (value was obtained from file: /Methylation.Rmd line 487)
+adj.p.cutoff <- 0.1
+dems2 <- dems$ID[as.numeric(dems$adj.P.Val) <= adj.p.cutoff]
+length(dems2)
+#7265 
+
+#set cutoff to extract differentially expressed genes (value was obtained from file: /Analysis_02A.Rmd line 36)
+p.adj <- 0.3
+degs2 <- degs$AFFYID[ degs$adj.P.Val < p.adj]
+length(degs2)
+#1327 
+
+#Subsetting the original methylation data matrix M according to differentially methylated cpgs and the comparisons chosen (DDLT and low injury)
+DiffM <- M[rownames(M) %in% dems2, ind]
+DiffM <- data.frame(DiffM)
+
+#taking row means over the specific groups (L1 and L2 respectively) to find average M-Value
+DiffM$ML1 <- rowMeans(DiffM[,grep("L1",colnames(DiffM))])
+DiffM$ML2 <- rowMeans(DiffM[,grep("L2",colnames(DiffM))])
+
+#Making sure the cpgs from the "2A.xlsx" file match the cpgs from the list that are differentially methylated (dems above). 
+#Need to do this so that the correct cpgs get extracted
+dems <- dems[match(rownames(DiffM), dems$ID),]
+DiffM$SYMBOL <- dems$UCSC_RefGene_Name[dems$ID %in% rownames(DiffM)]
+DiffM <- DiffM[,c("ML1","ML2","SYMBOL")]
+
+#Repeat process for differentiall expressed genes
+
+#Subsetting the original expression matrix exprs(eset) according to differentially expressed genes and the comparisons chosen (DDLT and low injury)
+DiffE <- exprs(eset)[rownames(exprs(eset)) %in% degs2, ind]
+DiffE <- data.frame(DiffE)
+
+#taking row means over the specific groups (pre and 90 (post) respectively) to find average expression
+DiffE$EL1 <- rowMeans(DiffE[,grep("pre",colnames(DiffE))])
+DiffE$EL2 <- rowMeans(DiffE[,grep("90",colnames(DiffE))])
+
+#Making sure the genes from the "DEGs_Analysis.xlsx" (sheet 2A) file match the genes from the list that are differentially expressed (degs above). 
+#Need to do this so that the correct genes get extracted
+degs <- degs[match(rownames(DiffE), degs$AFFYID),]
+DiffE$SYMBOL <- degs$SYMBOL[degs$AFFYID %in% rownames(DiffE)]
+DiffE <- DiffE[,c("EL1","EL2","SYMBOL")]
+
+ 
+
+#how many genes in common between DMcpgs and DEgenes
+length(intersect(DiffM$SYMBOL, DiffE$SYMBOL))
+#388
+commongenes <- intersect(DiffM$SYMBOL, DiffE$SYMBOL)
+
+#subsetting the average M values and average expression datasets according to genes that are in common between the two
+DiffM_c <- DiffM[DiffM$SYMBOL %in% commongenes,]
+DiffE_c <- DiffE[DiffE$SYMBOL %in% commongenes,]
+
+#left join to bring expression to methylation data and preserve the cpgs that are associated with the same gene
+M2A <- left_join(DiffM_c, DiffE_c, by = "SYMBOL")
+
+#creating a dataset where the first column is expression, second column is methylation, third column is gene, and fourth column is the group (here 0-Pre and 1-Post)
+M2A <- cbind.data.frame(c(M2A$EL1,M2A$EL2),c(M2A$ML1,M2A$ML2),M2A$SYMBOL, c(rep(0,544),rep(1,544)))
+colnames(M2A) <- c("Expression", "Methylation", "Symbol", "Group") 
+M2A$Group <- factor(M2A$Group)
+
+#plot
+ggplot(M2A, aes(x=Expression, y=Methylation)) +#, color=Group)) + 
+  geom_point() #+
+  #scale_color_manual(labels=c("Pre","Post"), values=c("red","blue"))
+```
+
+## DDLT & Injury=High
+##(pre vs post)
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
+
+ind <- (sample_annotation$Donor == "DDLT" & sample_annotation$Injury == "high")
+
+#gene expression
+degs <- read.xlsx("DEGs_Analysis.xlsx",
+                    sheet = "2B",
+                    startRow = 1,
+                    colNames = TRUE)
+
+#methylation
+dems <- read.xlsx("2B.xlsx",
+                  sheet = "DEGs",
+                  startRow = 1,
+                  colNames = TRUE)
+
+adj.p.cutoff <- 0.1
+dems2 <- dems$ID[as.numeric(dems$adj.P.Val) <= adj.p.cutoff]
+length(dems2)
+#665
+
+p.adj <- 0.3
+degs2 <- degs$AFFYID[ degs$adj.P.Val < p.adj]
+length(degs2)
+#2518
+
+DiffM <- M[rownames(M) %in% dems2, ind]
+DiffM <- data.frame(DiffM)
+DiffM$ML1 <- rowMeans(DiffM[,grep("L1",colnames(DiffM))])
+DiffM$ML2 <- rowMeans(DiffM[,grep("L2",colnames(DiffM))])
+dems <- dems[match(rownames(DiffM), dems$ID),]
+DiffM$SYMBOL <- dems$UCSC_RefGene_Name[dems$ID %in% rownames(DiffM)]
+DiffM <- DiffM[,c("ML1","ML2","SYMBOL")]
+
+
+DiffE <- exprs(eset)[rownames(exprs(eset)) %in% degs2, ind]
+DiffE <- data.frame(DiffE)
+DiffE$EL1 <- rowMeans(DiffE[,grep("pre",colnames(DiffE))])
+DiffE$EL2 <- rowMeans(DiffE[,grep("90",colnames(DiffE))])
+degs <- degs[match(rownames(DiffE), degs$AFFYID),]
+DiffE$SYMBOL <- degs$SYMBOL[degs$AFFYID %in% rownames(DiffE)]
+DiffE <- DiffE[,c("EL1","EL2","SYMBOL")]
+
+ 
+
+#how many genes in common
+length(intersect(DiffM$SYMBOL, DiffE$SYMBOL))
+#65
+commongenes <- intersect(DiffM$SYMBOL, DiffE$SYMBOL)
+
+DiffM_c <- DiffM[DiffM$SYMBOL %in% commongenes,]
+DiffE_c <- DiffE[DiffE$SYMBOL %in% commongenes,]
+
+#left join to bring expression to methylation data
+M2B <- left_join(DiffM_c, DiffE_c, by = "SYMBOL")
+M2B <- cbind.data.frame(c(M2B$EL1,M2B$EL2),c(M2B$ML1,M2B$ML2),M2B$SYMBOL, c(rep(0,dim(M2B)[1]),rep(1,dim(M2B)[1])))
+colnames(M2B) <- c("Expression", "Methylation", "Symbol", "Group") 
+
+ggplot(M2B, aes(x=Expression, y=Methylation)) + geom_point()
+```
+
+
+## DDLT & Pre
+##(low vs high)
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
+
+ind <- (sample_annotation$Donor == "DDLT" & sample_annotation$Type == "L1")
+
+#gene expression
+degs <- read.xlsx("DEGs_Analysis.xlsx",
+                    sheet = "3A",
+                    startRow = 1,
+                    colNames = TRUE)
+
+#methylation
+dems <- read.xlsx("3A.xlsx",
+                  sheet = "DEGs",
+                  startRow = 1,
+                  colNames = TRUE)
+
+adj.p.cutoff <- 0.1
+dems2 <- dems$ID[as.numeric(dems$adj.P.Val) <= adj.p.cutoff]
+length(dems2)
+#11119 
+
+#No degs returned using cut off of adj.P.Val<.3
+#p.adj <- 0.3
+#degs2 <- degs$AFFYID[ degs$adj.P.Val < p.adj]
+#length(degs2)
+#0 
+
+#use p value < .05 instead
+degs2 <- degs$AFFYID[ degs$P.Value < .05]
+length(degs2)
+#177
+
+ind2 <- sample_annotation[ind,]
+ind2 <- which(ind2$Injury=="low")
+
+DiffM <- M[rownames(M) %in% dems2, ind]
+DiffM <- data.frame(DiffM)
+DiffM$Mlow <- rowMeans(DiffM[,ind2])
+DiffM$Mhigh <- rowMeans(DiffM[,-ind2])
+dems <- dems[match(rownames(DiffM), dems$ID),]
+DiffM$SYMBOL <- dems$UCSC_RefGene_Name[dems$ID %in% rownames(DiffM)]
+DiffM <- DiffM[,c("Mlow","Mhigh","SYMBOL")]
+
+
+DiffE <- exprs(eset)[rownames(exprs(eset)) %in% degs2, ind]
+DiffE <- data.frame(DiffE)
+DiffE$Elow <- rowMeans(DiffE[,ind2])
+DiffE$Ehigh <- rowMeans(DiffE[,-ind2])
+degs <- degs[match(rownames(DiffE), degs$AFFYID),]
+DiffE$SYMBOL <- degs$SYMBOL[degs$AFFYID %in% rownames(DiffE)]
+DiffE <- DiffE[,c("Elow","Ehigh","SYMBOL")]
+
+ 
+
+#how many genes in common
+length(intersect(DiffM$SYMBOL, DiffE$SYMBOL))
+#47
+commongenes <- intersect(DiffM$SYMBOL, DiffE$SYMBOL)
+
+DiffM_c <- DiffM[DiffM$SYMBOL %in% commongenes,]
+DiffE_c <- DiffE[DiffE$SYMBOL %in% commongenes,]
+
+#left join to bring expression to methylation data
+M3A <- left_join(DiffM_c, DiffE_c, by = "SYMBOL")
+M3A <- cbind.data.frame(c(M3A$Elow,M3A$Ehigh),c(M3A$Mlow,M3A$Mhigh),M3A$SYMBOL, c(rep(0,dim(M3A)[1]),rep(1,dim(M3A)[1])))
+colnames(M3A) <- c("Expression", "Methylation", "Symbol", "Group") 
+
+ggplot(M3A, aes(x=Expression, y=Methylation)) + geom_point()
+```
+
+
+## DDLT & Post
+##(low vs high)
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
+
+ind <- (sample_annotation$Donor == "DDLT" & sample_annotation$Type == "L2")
+
+#gene expression
+degs <- read.xlsx("DEGs_Analysis.xlsx",
+                    sheet = "3B",
+                    startRow = 1,
+                    colNames = TRUE)
+
+#methylation
+dems <- read.xlsx("3B.xlsx",
+                  sheet = "DEGs",
+                  startRow = 1,
+                  colNames = TRUE)
+
+#code in Methylation file uses .3 instead of .1
+adj.p.cutoff <- 0.3
+dems2 <- dems$ID[as.numeric(dems$adj.P.Val) <= adj.p.cutoff]
+length(dems2)
+#17777
+
+
+#code in Analysis3B uses p value < .05 instead
+degs2 <- degs$AFFYID[ degs$P.Value < .05]
+length(degs2)
+#314
+
+ind2 <- sample_annotation[ind,]
+ind2 <- which(ind2$Injury=="low")
+
+DiffM <- M[rownames(M) %in% dems2, ind]
+DiffM <- data.frame(DiffM)
+DiffM$Mlow <- rowMeans(DiffM[,ind2])
+DiffM$Mhigh <- rowMeans(DiffM[,-ind2])
+dems <- dems[match(rownames(DiffM), dems$ID),]
+DiffM$SYMBOL <- dems$UCSC_RefGene_Name[dems$ID %in% rownames(DiffM)]
+DiffM <- DiffM[,c("Mlow","Mhigh","SYMBOL")]
+
+
+DiffE <- exprs(eset)[rownames(exprs(eset)) %in% degs2, ind]
+DiffE <- data.frame(DiffE)
+DiffE$Elow <- rowMeans(DiffE[,ind2])
+DiffE$Ehigh <- rowMeans(DiffE[,-ind2])
+degs <- degs[match(rownames(DiffE), degs$AFFYID),]
+DiffE$SYMBOL <- degs$SYMBOL[degs$AFFYID %in% rownames(DiffE)]
+DiffE <- DiffE[,c("Elow","Ehigh","SYMBOL")]
+
+ 
+
+#how many genes in common
+length(intersect(DiffM$SYMBOL, DiffE$SYMBOL))
+#137
+commongenes <- intersect(DiffM$SYMBOL, DiffE$SYMBOL)
+
+DiffM_c <- DiffM[DiffM$SYMBOL %in% commongenes,]
+DiffE_c <- DiffE[DiffE$SYMBOL %in% commongenes,]
+
+#left join to bring expression to methylation data
+M3B <- left_join(DiffM_c, DiffE_c, by = "SYMBOL")
+M3B <- cbind.data.frame(c(M3B$Elow,M3B$Ehigh),c(M3B$Mlow,M3B$Mhigh),M3B$SYMBOL, c(rep(0,dim(M3B)[1]),rep(1,dim(M3B)[1])))
+colnames(M3B) <- c("Expression", "Methylation", "Symbol", "Group") 
+
+ggplot(M3B, aes(x=Expression, y=Methylation)) + geom_point()
+
+```

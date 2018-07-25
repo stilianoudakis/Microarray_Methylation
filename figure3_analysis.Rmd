@@ -1,0 +1,497 @@
+---
+title: 'Figure 3: Formal P-Values & Plots'
+author: "Spiro Stilianoudakis"
+date: "July 25, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Libraries
+
+```{r include=FALSE}
+#base R packages
+library(data.table)
+library(dplyr)
+library(geneplotter)
+library(ggplot2)
+#library(gplots)
+library(RColorBrewer)
+library(pheatmap)
+library(ggbeeswarm)
+library(rcompanion)
+library(stringr)
+library(openxlsx)
+
+#bioconductor packages
+#library(MultiAssayExperiment)
+#library(GenomicRanges)
+#library(IRanges)
+#library(RaggedExperiment)
+#library(SummarizedExperiment)
+
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("edgeR")
+#library(samr)
+#library(edgeR)
+#library(limma)
+#library(DESeq2)
+#library(EDASeq)
+#library(hgu95av2.db)
+#library(apeglm)
+#library(genefilter)
+#library(affy)
+```
+
+# Setting directory & importing workspace data
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/data")
+
+load("preprocessed_CEL.Rdata")
+load("preprocessed_data.Rdata")
+```
+
+# Methylation
+
+## 2A. 
+
+### Donor == "DDLT" & Injury == "low"
+
+### comparison <- factor(sample_annotation$Type, levels = c("L1", "L2"))
+
+```{r}
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
+
+#set the index for subsetting the data according to the analysis of choice
+ind <- (sample_annotation$Donor == "DDLT" & sample_annotation$Injury == "low")
+
+#import methylation data
+dems <- read.xlsx("2A.xlsx",
+                  sheet = "DEGs",
+                  startRow = 1,
+                  colNames = TRUE)
+
+#set cutoff to extract differentially methylated cpgs (value was obtained from file: /Methylation.Rmd line 487)
+adj.p.cutoff <- 0.1
+dems <- dems[as.numeric(dems$adj.P.Val) <= adj.p.cutoff,]
+dim(dems)
+#7265 
+
+
+#using lfc to classify as hypomethylated or hypermethylated dm cpgs
+dems$Hypomethylated <- ifelse(dems$logFC<0,1,0)
+dems$Hypomethylated <- as.factor(dems$Hypomethylated)
+
+table(dems$Hypomethylated)
+#   0    1 
+#3427 3838 
+
+```
+
+## 2A CGI Regions
+
+```{r}
+#CGI Regions
+table(dems$Relation_to_UCSC_CpG_Island)
+
+#regrouping cgi regions
+dems$Relation_to_UCSC_CpG_Island[grep("Shelf",dems$Relation_to_UCSC_CpG_Island)] <- "Shelf"
+dems$Relation_to_UCSC_CpG_Island[grep("Shore",dems$Relation_to_UCSC_CpG_Island)] <- "Shore"
+dems$Relation_to_UCSC_CpG_Island[grep("Island",dems$Relation_to_UCSC_CpG_Island)] <- "CGI"
+dems$Relation_to_UCSC_CpG_Island[which(dems$Relation_to_UCSC_CpG_Island=="")] <- "Non_CGI"
+
+dems$Relation_to_UCSC_CpG_Island <- as.factor(dems$Relation_to_UCSC_CpG_Island)
+
+#sanity check
+table(dems$Relation_to_UCSC_CpG_Island)
+
+table(dems$Hypomethylated, dems$Relation_to_UCSC_CpG_Island)
+
+#one way chisq. test for hypomethylated
+chisq.test(table(dems$Relation_to_UCSC_CpG_Island[dems$Hypomethylated==1]))
+#p-value < 2.2e-16
+
+
+#overall chisq test type of methylation vs CGI
+chisq.test(table(dems$Hypomethylated, dems$Relation_to_UCSC_CpG_Island))
+#p-value < 2.2e-16
+
+#pairwise chisq tests
+pairwiseNominalIndependence(table(dems$Hypomethylated, dems$Relation_to_UCSC_CpG_Island), compare = "column",
+                            fisher = FALSE,
+                            gtest  = FALSE,
+                            chisq  = TRUE,
+                            method = "fdr")
+
+tab <- t(table(dems$Relation_to_UCSC_CpG_Island,dems$Hypomethylated))
+
+dat <- data.frame(DiffMethy = c(rep("hyper",4),rep("hypo",4)), 
+                  CGI = rep(c("CGI","Non_CGI","Shelf","Shore"),2),
+                  Frequency = c(tab[1,],tab[2,]))
+
+ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=CGI)) +
+  geom_bar(stat="identity")
+
+ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=CGI)) +
+  geom_bar(stat="identity", position="dodge")
+
+#pie charts
+
+blank_theme <- theme_minimal()+
+  theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.border = element_blank(),
+  panel.grid=element_blank(),
+  axis.ticks = element_blank(),
+  plot.title=element_text(size=14, face="bold")
+  )
+
+#hypo
+dat2 <- dat[dat$DiffMethy=="hypo",]
+bp<- ggplot(dat2, aes(x="", y=Frequency, fill=CGI))+
+geom_bar(width = 1, stat = "identity")
+bp
+prop.table(dat2$Frequency)
+#0.62741011 0.07894737 0.01771756 0.27592496
+pie <- bp + coord_polar("y", start=0) + scale_fill_discrete(name = "") + blank_theme + theme(axis.text.x=element_blank()) + theme(legend.text=element_text(size=20),legend.key.height=unit(2,"line"))
+pie
+
+#hyper
+dat2 <- dat[dat$DiffMethy=="hyper",]
+bp<- ggplot(dat2, aes(x="", y=Frequency, fill=CGI))+
+geom_bar(width = 1, stat = "identity")
+bp
+#0.1126350 0.5202801 0.1756638 0.1914211
+pie <- bp + coord_polar("y", start=0) + scale_fill_discrete(name = "") + blank_theme + theme(axis.text.x=element_blank()) + theme(legend.text=element_text(size=20),legend.key.height=unit(2,"line"))
+pie
+
+```
+
+##2A Gene-Centric Regions
+
+```{r}
+#Gene-Centric Regions
+table(dems$UCSC_RefGene_Group)
+
+dems$UCSC_RefGene_Group[which(dems$UCSC_RefGene_Group=="")] <- "Non-Genic"
+
+#list of the different categories
+unique(unlist(strsplit(dems$UCSC_RefGene_Group,"\\|")))
+
+#Compacting and Separating each level of the UCSC_RefGene_Group covariate
+#using dplyr package
+dems$UCSC_RefGene_Group <- sapply(dems$UCSC_RefGene_Group, function(x) strsplit(x, ";") %>% 
+                                                  unlist %>% sort %>% unique %>% 
+                                    paste(collapse="|")) %>% unlist %>% as.character
+
+
+#separating the cpgs with multiple refgene groups
+z <- dems[str_count(dems$UCSC_RefGene_Group, "\\|")>0,c(1,2,14)]
+z <- z[order(z$UCSC_RefGene_Group),]
+
+covariates <- matrix(nrow=dim(z)[1],ncol=length(unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|")))))
+ 
+for(i in 1:length(unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|"))))){
+         covariates[,i] <- ifelse(1:dim(z)[1] %in% grep(unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|")))[i],z$UCSC_RefGene_Group),1,0)
+         
+       }
+
+covariates <- data.frame(covariates)
+covariates$sum <- rowSums(covariates)
+
+z2 <- cbind.data.frame(z,covariates)
+colnames(z2)[dim(z)[2]+1:length(unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|"))))] <- unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|")))
+
+z2 <- data.frame(z2[rep(seq_len(dim(z2)[1]), z2$sum),, drop = FALSE], row.names=NULL)
+
+z2 <- z2 %>% group_by(ID) %>%
+       mutate(num = 1:n())
+z2 <- data.frame(z2)
+
+z2$refgene <- NA
+
+for(i in 1:dim(z2)[1]){
+  z2$refgene[i] <- strsplit(z2$UCSC_RefGene_Group[i],"\\|")[[1]][z2$num[i]]
+}
+
+z2 <- z2[,c("ID","logFC", "refgene")]
+
+#concatenate with the single group cpgs
+y <- dems[str_count(dems$UCSC_RefGene_Group, "\\|")==0,c(1,2,14)]
+colnames(y)[3] <- "refgene"
+
+genecent <- rbind.data.frame(z2,y) 
+
+table(genecent$refgene)
+
+genecent$refgene[which(genecent$refgene=="5UTR" |
+                                  genecent$refgene=="TSS1500" |
+                                  genecent$refgene=="TSS200")] <- "Promotor"
+genecent$Hypomethylated <- ifelse(genecent$logFC<0,1,0)
+
+#one way chisq. test for hypomethylated
+chisq.test(table(genecent$refgene[genecent$Hypomethylated==1]))
+#p-value < 2.2e-16
+
+#overall chisq test type of methylation vs CGI
+chisq.test(table(genecent$Hypomethylated, genecent$refgene))
+#p-value < 2.2e-16
+
+#pairwise chisq tests
+pairwiseNominalIndependence(table(genecent$Hypomethylated, genecent$refgene), compare = "column",
+                            fisher = FALSE,
+                            gtest  = FALSE,
+                            chisq  = TRUE,
+                            method = "bonferroni")
+
+tab <- t(table(genecent$refgene,genecent$Hypomethylated))
+
+dat <- data.frame(DiffMethy = c(rep("hyper",5),rep("hypo",5)), 
+                  "Gene Region" = rep(c("1st Exon", "3' UTR", "Body", "Non-Genic", "Promotor"),2),
+                  Frequency = c(tab[1,],tab[2,]))
+
+ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=Gene.Region)) +
+  geom_bar(stat="identity")
+
+ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=Gene.Region)) +
+  geom_bar(stat="identity", position="dodge")
+
+#pie charts
+#hypo
+dat2 <- dat[dat$DiffMethy=="hypo",]
+bp<- ggplot(dat2, aes(x="", y=Frequency, fill=Gene.Region))+
+geom_bar(width = 1, stat = "identity")
+bp
+#0.141697274 0.009085637 0.174753528 0.077324570 0.597138991
+pie <- bp + coord_polar("y", start=0) + scale_fill_discrete(name = "") + blank_theme + theme(axis.text.x=element_blank()) + theme(legend.text=element_text(size=20),legend.key.height=unit(2,"line"))
+pie
+
+#hyper
+dat2 <- dat[dat$DiffMethy=="hyper",]
+bp<- ggplot(dat2, aes(x="", y=Frequency, fill=Gene.Region))+
+geom_bar(width = 1, stat = "identity")
+bp
+#0.01935484 0.09381720 0.49623656 0.18844086 0.20215054
+pie <- bp + coord_polar("y", start=0) + scale_fill_discrete(name = "") + blank_theme + theme(axis.text.x=element_blank()) + theme(legend.text=element_text(size=20),legend.key.height=unit(2,"line"))
+pie
+
+
+```
+
+
+## 2B. 
+
+### Donor == "DDLT" & Injury == "high"
+
+### comparison <- factor(sample_annotation$Type, levels = c("L1", "L2"))
+
+```{r}
+
+setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/results")
+
+#set the index for subsetting the data according to the analysis of choice
+ind <- (sample_annotation$Donor == "DDLT" & sample_annotation$Injury == "high")
+
+#import methylation data
+dems <- read.xlsx("2B.xlsx",
+                  sheet = "DEGs",
+                  startRow = 1,
+                  colNames = TRUE)
+
+#set cutoff to extract differentially methylated cpgs (value was obtained from file: /Methylation.Rmd line 487)
+adj.p.cutoff <- 0.1
+dems <- dems[as.numeric(dems$adj.P.Val) <= adj.p.cutoff,]
+dim(dems)
+#665 
+
+
+#using lfc to classify as hypomethylated or hypermethylated dm cpgs
+dems$Hypomethylated <- ifelse(dems$logFC<0,1,0)
+dems$Hypomethylated <- as.factor(dems$Hypomethylated)
+
+table(dems$Hypomethylated)
+#  0   1 
+# 94 571
+```
+
+##2B CGI Regions
+
+```{r}
+table(dems$Relation_to_UCSC_CpG_Island)
+
+#regrouping cgi regions
+dems$Relation_to_UCSC_CpG_Island[grep("Shelf",dems$Relation_to_UCSC_CpG_Island)] <- "Shelf"
+dems$Relation_to_UCSC_CpG_Island[grep("Shore",dems$Relation_to_UCSC_CpG_Island)] <- "Shore"
+dems$Relation_to_UCSC_CpG_Island[grep("Island",dems$Relation_to_UCSC_CpG_Island)] <- "CGI"
+dems$Relation_to_UCSC_CpG_Island[which(dems$Relation_to_UCSC_CpG_Island=="")] <- "Non_CGI"
+
+dems$Relation_to_UCSC_CpG_Island <- as.factor(dems$Relation_to_UCSC_CpG_Island)
+
+#sanity check
+table(dems$Relation_to_UCSC_CpG_Island)
+
+table(dems$Hypomethylated, dems$Relation_to_UCSC_CpG_Island)
+
+#one way chisq. test for hypomethylated
+chisq.test(table(dems$Relation_to_UCSC_CpG_Island[dems$Hypomethylated==1]))
+#p-value < 2.2e-16
+
+#overall chisq test type of methylation vs CGI
+chisq.test(table(dems$Hypomethylated, dems$Relation_to_UCSC_CpG_Island))
+#p-value < 2.2e-16
+
+#pairwise chisq tests
+pairwiseNominalIndependence(table(dems$Hypomethylated, dems$Relation_to_UCSC_CpG_Island), compare = "column",
+                            fisher = FALSE,
+                            gtest  = FALSE,
+                            chisq  = TRUE,
+                            method = "fdr")
+
+tab <- t(table(dems$Relation_to_UCSC_CpG_Island,dems$Hypomethylated))
+
+dat <- data.frame(DiffMethy = c(rep("hyper",4),rep("hypo",4)), 
+                  CGI = rep(c("CGI","Non_CGI","Shelf","Shore"),2),
+                  Frequency = c(tab[1,],tab[2,]))
+
+ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=CGI)) +
+  geom_bar(stat="identity")
+
+ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=CGI)) +
+  geom_bar(stat="identity", position="dodge")
+
+
+#pie charts
+#hypo
+dat2 <- dat[dat$DiffMethy=="hypo",]
+bp<- ggplot(dat2, aes(x="", y=Frequency, fill=CGI))+
+geom_bar(width = 1, stat = "identity")
+bp
+#0.07880911 0.50788091 0.15761821 0.25569177
+pie <- bp + coord_polar("y", start=0) + scale_fill_discrete(name = "") + blank_theme + theme(axis.text.x=element_blank()) + theme(legend.text=element_text(size=20),legend.key.height=unit(2,"line"))
+pie
+
+#hyper
+dat2 <- dat[dat$DiffMethy=="hyper",]
+bp<- ggplot(dat2, aes(x="", y=Frequency, fill=CGI))+
+geom_bar(width = 1, stat = "identity")
+bp
+#0.11702128 0.53191489 0.09574468 0.25531915
+pie <- bp + coord_polar("y", start=0) + scale_fill_discrete(name = "") + blank_theme + theme(axis.text.x=element_blank()) + theme(legend.text=element_text(size=20),legend.key.height=unit(2,"line"))
+pie
+
+```
+
+##2B Gene-Centric Regions
+
+```{r}
+#Gene-Centric Regions
+table(dems$UCSC_RefGene_Group)
+
+dems$UCSC_RefGene_Group[which(dems$UCSC_RefGene_Group=="")] <- "Non-Genic"
+
+#list of the different categories
+unique(unlist(strsplit(dems$UCSC_RefGene_Group,"\\|")))
+
+#Compacting and Separating each level of the UCSC_RefGene_Group covariate
+#using dplyr package
+dems$UCSC_RefGene_Group <- sapply(dems$UCSC_RefGene_Group, function(x) strsplit(x, ";") %>% 
+                                                  unlist %>% sort %>% unique %>% 
+                                    paste(collapse="|")) %>% unlist %>% as.character
+
+
+#separating the cpgs with multiple refgene groups
+z <- dems[str_count(dems$UCSC_RefGene_Group, "\\|")>0,c(1,2,14)]
+z <- z[order(z$UCSC_RefGene_Group),]
+
+covariates <- matrix(nrow=dim(z)[1],ncol=length(unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|")))))
+ 
+for(i in 1:length(unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|"))))){
+         covariates[,i] <- ifelse(1:dim(z)[1] %in% grep(unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|")))[i],z$UCSC_RefGene_Group),1,0)
+         
+       }
+
+covariates <- data.frame(covariates)
+covariates$sum <- rowSums(covariates)
+
+z2 <- cbind.data.frame(z,covariates)
+colnames(z2)[dim(z)[2]+1:length(unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|"))))] <- unique(unlist(strsplit(z$UCSC_RefGene_Group,"\\|")))
+
+z2 <- data.frame(z2[rep(seq_len(dim(z2)[1]), z2$sum),, drop = FALSE], row.names=NULL)
+
+z2 <- z2 %>% group_by(ID) %>%
+       mutate(num = 1:n())
+z2 <- data.frame(z2)
+
+z2$refgene <- NA
+
+for(i in 1:dim(z2)[1]){
+  z2$refgene[i] <- strsplit(z2$UCSC_RefGene_Group[i],"\\|")[[1]][z2$num[i]]
+}
+
+z2 <- z2[,c("ID","logFC", "refgene")]
+
+#concatenate with the single group cpgs
+y <- dems[str_count(dems$UCSC_RefGene_Group, "\\|")==0,c(1,2,14)]
+colnames(y)[3] <- "refgene"
+
+genecent <- rbind.data.frame(z2,y) 
+
+table(genecent$refgene)
+
+genecent$refgene[which(genecent$refgene=="5UTR" |
+                                  genecent$refgene=="TSS1500" |
+                                  genecent$refgene=="TSS200")] <- "Promotor"
+genecent$Hypomethylated <- ifelse(genecent$logFC<0,1,0)
+
+#one way chisq. test for hypomethylated
+chisq.test(table(genecent$refgene[genecent$Hypomethylated==1]))
+#p-value < 2.2e-16
+
+#overall chisq test type of methylation vs CGI
+fisher.test(table(genecent$Hypomethylated, genecent$refgene))
+#p-value = 0.2573
+
+#pairwise chisq tests
+pairwiseNominalIndependence(table(genecent$Hypomethylated, genecent$refgene), compare = "column",
+                            fisher = TRUE,
+                            gtest  = FALSE,
+                            chisq  = FALSE,
+                            method = "bonferroni")
+
+tab <- t(table(genecent$refgene,genecent$Hypomethylated))
+
+dat <- data.frame(DiffMethy = c(rep("hyper",5),rep("hypo",5)), 
+                  "Gene Region" = rep(c("1st Exon", "3' UTR", "Body", "Non-Genic", "Promotor"),2),
+                  Frequency = c(tab[1,],tab[2,]))
+
+ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=Gene.Region)) +
+  geom_bar(stat="identity")
+
+ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=Gene.Region)) +
+  geom_bar(stat="identity", position="dodge")
+
+#pie charts
+#hypo
+dat2 <- dat[dat$DiffMethy=="hypo",]
+bp<- ggplot(dat2, aes(x="", y=Frequency, fill=Gene.Region))+
+geom_bar(width = 1, stat = "identity")
+bp
+#0.0455259 0.0455259 0.5086342 0.1648352 0.2354788
+pie <- bp + coord_polar("y", start=0) + scale_fill_discrete(name = "") + blank_theme + theme(axis.text.x=element_blank()) + theme(legend.text=element_text(size=20),legend.key.height=unit(2,"line"))
+pie
+
+#hyper
+dat2 <- dat[dat$DiffMethy=="hyper",]
+bp<- ggplot(dat2, aes(x="", y=Frequency, fill=Gene.Region))+
+geom_bar(width = 1, stat = "identity")
+bp
+#0.04504505 0.01801802 0.43243243 0.19819820 0.30630631
+pie <- bp + coord_polar("y", start=0) + scale_fill_discrete(name = "") + blank_theme + theme(axis.text.x=element_blank()) + theme(legend.text=element_text(size=20),legend.key.height=unit(2,"line"))
+pie
+
+```
+
