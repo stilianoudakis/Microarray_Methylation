@@ -126,6 +126,20 @@ pairwiseNominalIndependence(table(dems$Hypomethylated, dems$Relation_to_UCSC_CpG
                             chisq  = TRUE,
                             method = "fdr")
 
+dems$CGI <- ifelse(dems$Relation_to_UCSC_CpG_Island=="CGI",1,0)
+dems$Non_CGI <- ifelse(dems$Relation_to_UCSC_CpG_Island=="Non_CGI",1,0)
+dems$Shelf <- ifelse(dems$Relation_to_UCSC_CpG_Island=="Shelf",1,0)
+dems$Shore <- ifelse(dems$Relation_to_UCSC_CpG_Island=="Shore",1,0)
+
+chisq.test(dems$Hypomethylated, dems$CGI)$p.value
+#0
+chisq.test(dems$Hypomethylated, dems$Non_CGI)$p.value
+#0
+chisq.test(dems$Hypomethylated, dems$Shelf)$p.value
+#6.256347e-119
+chisq.test(dems$Hypomethylated, dems$Shore)$p.value
+#3.193821e-17
+
 #Bar plots
 tab <- t(table(dems$Relation_to_UCSC_CpG_Island,dems$Hypomethylated))
 dat <- data.frame(DiffMethy = c(rep("hyper",4),rep("hypo",4)), 
@@ -133,12 +147,29 @@ dat <- data.frame(DiffMethy = c(rep("hyper",4),rep("hypo",4)),
                   Frequency = c(tab[1,],tab[2,]))
 
 ## stacked
-ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=CGI)) +
+ggplot(data=dat, aes(x=CGI, y=Frequency, fill=DiffMethy)) +
   geom_bar(stat="identity")
 
 ## grouped
-ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=CGI)) +
-  geom_bar(stat="identity", position="dodge")
+ggplot(data=dat, aes(x=CGI, y=Frequency, fill=DiffMethy)) +
+  geom_bar(stat="identity", position="dodge", color="black") + 
+  xlab("CGI Region") + ggtitle("Low Injury (Pre-Imp vs Post-Rep)") +
+  scale_fill_manual(values=c("grey", "black"), labels = c("Hypermethylated", "Hypomethylated")) +
+  guides(fill=guide_legend(title="Methylation")) + scale_x_discrete(labels=c("CGI", "Non-CGI", "Shelf", "Shore")) +
+  annotate("text", x=1, y=2500, label= "***", size=5) +
+  annotate("text", x=2, y=1900, label= "***", size=5) +
+  annotate("text", x=3, y=700, label= "***", size=5) +
+  annotate("text", x=4, y=1150, label= "***", size=5) +
+  annotate("text", x=5.5, y=2500, label= "Significance", size=4) +
+  annotate("text", x=5.5, y=2300, label= "--   > 0.05", size=3.5) +
+  annotate("text", x=5.5, y=2150, label= "*   < 0.01", size=3.5) +
+  annotate("text", x=5.5, y=2000, label= "**   < 0.001", size=3.5) +
+  annotate("text", x=5.5, y=1850, label= "***   < 0.0001", size=3.5) +
+  coord_cartesian(xlim = c(1, 4), # This focuses the x-axis on the range of interest
+                      clip = 'off' # This keeps the labels from disappearing
+                      ) +
+  theme_minimal()
+
 
 #pie charts
 
@@ -236,6 +267,9 @@ table(genecent$refgene)
 genecent$refgene[which(genecent$refgene=="5UTR" |
                                   genecent$refgene=="TSS1500" |
                                   genecent$refgene=="TSS200")] <- "Promotor"
+
+table(genecent$refgene)
+
 genecent$Hypomethylated <- ifelse(genecent$logFC<0,1,0)
 
 #one way chisq. test for hypomethylated
@@ -253,6 +287,24 @@ pairwiseNominalIndependence(table(genecent$Hypomethylated, genecent$refgene), co
                             chisq  = TRUE,
                             method = "bonferroni")
 
+genecent$FirstExon <- ifelse(genecent$refgene=="1stExon",1,0)
+genecent$ThreeUTR <- ifelse(genecent$refgene=="3UTR",1,0)
+genecent$Body <- ifelse(genecent$refgene=="Body",1,0)
+genecent$Non_Genic <- ifelse(genecent$refgene=="Non-Genic",1,0)
+genecent$Promotor <- ifelse(genecent$refgene=="Promotor",1,0)
+
+chisq.test(genecent$Hypomethylated, genecent$FirstExon)$p.value
+#3.14513e-87
+chisq.test(genecent$Hypomethylated, genecent$ThreeUTR)$p.value
+#5.790246e-81
+chisq.test(genecent$Hypomethylated, genecent$Body)$p.value
+#2.347866e-229
+chisq.test(genecent$Hypomethylated, genecent$Non_Genic)$p.value
+#2.790058e-55
+chisq.test(genecent$Hypomethylated, genecent$Promotor)$p.value
+#8.010462e-301
+
+
 #Barplots
 tab <- t(table(genecent$refgene,genecent$Hypomethylated))
 dat <- data.frame(DiffMethy = c(rep("hyper",5),rep("hypo",5)), 
@@ -264,8 +316,26 @@ ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=Gene.Region)) +
   geom_bar(stat="identity")
 
 ## grouped
-ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=Gene.Region)) +
-  geom_bar(stat="identity", position="dodge")
+ggplot(data=dat, aes(x=Gene.Region, y=Frequency, fill=DiffMethy)) +
+  geom_bar(stat="identity", position="dodge", color="black") + 
+  xlab("Gene-Centric Region") + ggtitle("Low Injury (Pre-Imp vs Post-Rep)") +
+  scale_fill_manual(values=c("grey", "black"), labels = c("Hypermethylated", "Hypomethylated")) +
+  guides(fill=guide_legend(title="Methylation")) + scale_x_discrete(labels=c("1st Exon", "3' UTR", "Body", "Non-Genic", "Promotor")) +
+  annotate("text", x=1, y=900, label= "***", size=5) +
+  annotate("text", x=2, y=500, label= "***", size=5) +
+  annotate("text", x=3, y=2000, label= "***", size=5) +
+  annotate("text", x=4, y=900, label= "***", size=5) +
+  annotate("text", x=5, y=3200, label= "***", size=5) +
+  annotate("text", x=6.5, y=3000, label= "Significance", size=4) +
+  annotate("text", x=6.5, y=2700, label= "--   > 0.05", size=3.5) +
+  annotate("text", x=6.5, y=2550, label= "*   < 0.01", size=3.5) +
+  annotate("text", x=6.5, y=2400, label= "**   < 0.001", size=3.5) +
+  annotate("text", x=6.5, y=2250, label= "***   < 0.0001", size=3.5) +
+  coord_cartesian(xlim = c(1, 5), 
+                      clip = 'off') +
+  theme_minimal()
+
+
 
 #pie charts
 #hypomethylated
@@ -360,17 +430,45 @@ pairwiseNominalIndependence(table(dems$Hypomethylated, dems$Relation_to_UCSC_CpG
                             chisq  = TRUE,
                             method = "fdr")
 
-tab <- t(table(dems$Relation_to_UCSC_CpG_Island,dems$Hypomethylated))
+dems$CGI <- ifelse(dems$Relation_to_UCSC_CpG_Island=="CGI",1,0)
+dems$Non_CGI <- ifelse(dems$Relation_to_UCSC_CpG_Island=="Non_CGI",1,0)
+dems$Shelf <- ifelse(dems$Relation_to_UCSC_CpG_Island=="Shelf",1,0)
+dems$Shore <- ifelse(dems$Relation_to_UCSC_CpG_Island=="Shore",1,0)
 
+chisq.test(dems$Hypomethylated, dems$CGI)$p.value
+chisq.test(dems$Hypomethylated, dems$Non_CGI)$p.value
+chisq.test(dems$Hypomethylated, dems$Shelf)$p.value
+chisq.test(dems$Hypomethylated, dems$Shore)$p.value
+
+#Bar plots
+tab <- t(table(dems$Relation_to_UCSC_CpG_Island,dems$Hypomethylated))
 dat <- data.frame(DiffMethy = c(rep("hyper",4),rep("hypo",4)), 
                   CGI = rep(c("CGI","Non_CGI","Shelf","Shore"),2),
                   Frequency = c(tab[1,],tab[2,]))
 
-ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=CGI)) +
+## stacked
+ggplot(data=dat, aes(x=CGI, y=Frequency, fill=DiffMethy)) +
   geom_bar(stat="identity")
 
-ggplot(data=dat, aes(x=DiffMethy, y=Frequency, fill=CGI)) +
-  geom_bar(stat="identity", position="dodge")
+## grouped
+ggplot(data=dat, aes(x=CGI, y=Frequency, fill=DiffMethy)) +
+  geom_bar(stat="identity", position="dodge", color="black") + 
+  xlab("CGI Region") + ggtitle("High Injury (Pre-Imp vs Post-Rep)") +
+  scale_fill_manual(values=c("grey", "black"), labels = c("Hypermethylated", "Hypomethylated")) +
+  guides(fill=guide_legend(title="Methylation")) + scale_x_discrete(labels=c("CGI", "Non-CGI", "Shelf", "Shore")) +
+  annotate("text", x=1, y=60, label= "--", size=6) +
+  annotate("text", x=2, y=300, label= "--", size=6) +
+  annotate("text", x=3, y=100, label= "--", size=6) +
+  annotate("text", x=4, y=160, label= "--", size=6) +
+  annotate("text", x=5.5, y=275, label= "Significance", size=4) +
+  annotate("text", x=5.5, y=250, label= "--   > 0.05", size=3.5) +
+  annotate("text", x=5.5, y=235, label= "*   < 0.05", size=3.5) +
+  annotate("text", x=5.5, y=220, label= "**   < 0.001", size=3.5) +
+  annotate("text", x=5.5, y=205, label= "***   < 0.0001", size=3.5) +
+  coord_cartesian(xlim = c(1, 4), # This focuses the x-axis on the range of interest
+                      clip = 'off' # This keeps the labels from disappearing
+                      ) +
+  theme_minimal()
 
 
 #pie charts

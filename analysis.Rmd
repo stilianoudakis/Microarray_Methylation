@@ -26,23 +26,23 @@ library(rcompanion)
 library(stringr)
 
 #bioconductor packages
-library(MultiAssayExperiment)
-library(GenomicRanges)
-library(IRanges)
-library(RaggedExperiment)
-library(SummarizedExperiment)
+#library(MultiAssayExperiment)
+#library(GenomicRanges)
+#library(IRanges)
+#library(RaggedExperiment)
+#library(SummarizedExperiment)
 
 #source("http://bioconductor.org/biocLite.R")
 #biocLite("edgeR")
-library(samr)
-library(edgeR)
-library(limma)
-library(DESeq2)
-library(EDASeq)
-library(hgu95av2.db)
-library(apeglm)
-library(genefilter)
-library(affy)
+#library(samr)
+#library(edgeR)
+#library(limma)
+#library(DESeq2)
+#library(EDASeq)
+#library(hgu95av2.db)
+#library(apeglm)
+#library(genefilter)
+#library(affy)
 ```
 
 # Setting directory & importing workspace data
@@ -50,7 +50,7 @@ library(affy)
 ```{r}
 setwd("C:/Users/Spiro Stilianoudakis/Documents/Microarray_methylation_materials/data")
 
-load("preprocessed_data.Rdata")
+load("preprocessed_CEL.Rdata")
 load("preprocessed_data.Rdata")
 ```
 
